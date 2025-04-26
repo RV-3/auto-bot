@@ -1,232 +1,261 @@
-import { useState, useEffect } from 'react';
-import './Dashboard.css'; // Tailwind + any custom overrides
+import React, { useState, useEffect } from 'react';
 
-/**
- * parseClosedTrades parses lines like:
- * [12:35:01] TRADE CLOSE LONG @ $2000.00 STOP hit. PNL=50.00, New Balance=1050.00
- * returning an array of objects with {timestamp, side, closePrice, outcomeType, pnl, newBalance}
- */
-function parseClosedTrades(logs) {
-  const regex = /\[(.*?)\]\s+TRADE CLOSE (LONG|SHORT)\s+@\s+\$(\d+(\.\d+)?)\s+(STOP|TP)\s+hit\.\s+PNL=(\d+(\.\d+)?),\s+New Balance=(\d+(\.\d+)?)/;
-  return logs
-    .filter((line) => line.includes("TRADE CLOSE"))
-    .map((line) => {
-      const match = line.match(regex);
-      if (!match) {
-        // If format doesn't match exactly, store the raw line
-        return { raw: line };
-      }
-      const [
-        full,
-        timestamp,
-        side,
-        closePrice,
-        _decClose,
-        outcomeType, // "STOP" or "TP"
-        pnl,
-        _decPnl,
-        newBalance
-      ] = match;
-      return {
-        timestamp,
-        side,
-        closePrice: parseFloat(closePrice),
-        outcomeType,
-        pnl: parseFloat(pnl),
-        newBalance: parseFloat(newBalance),
-      };
-    });
-}
-
-export default function Dashboard() {
+function Dashboard() {
   const [statusData, setStatusData] = useState(null);
-  const [fetchError, setFetchError] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchStatus = async () => {
+    // Define a function to fetch the status data
+    async function fetchStatus() {
       try {
-        // If you have a Vite proxy:
-        //   fetch("/status");
-        // If not:
-        //   fetch("http://localhost:8080/status");
-        const res = await fetch("/status");
-        if (!res.ok) {
-          throw new Error(`Fetch failed with status ${res.status}`);
+        const response = await fetch('/status');
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
         }
-        const json = await res.json();
-        console.log("Fetched data:", json); // << LOG EVERY FETCH RESULT
-        setStatusData(json);
-        setFetchError(null);
+        const data = await response.json();
+        setStatusData(data);
+        setError(null); // clear any previous error on success
       } catch (err) {
-        console.error("Failed to fetch /status:", err);
-        setFetchError(err.message || "Unknown fetch error");
+        console.error('Error fetching /status:', err);
+        setError(err);
+      } finally {
+        setLoading(false);
       }
-    };
+    }
+
+    // Fetch once immediately, then set up interval polling
     fetchStatus();
-    const intervalId = setInterval(fetchStatus, 5000); // poll every 5s
+    const intervalId = setInterval(fetchStatus, 5000); // poll every 5 seconds
+
+    // Cleanup on component unmount
     return () => clearInterval(intervalId);
   }, []);
 
-  if (fetchError) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
-        <p>Error fetching /status: {fetchError}</p>
-      </div>
-    );
-  }
+  // Derive data fields for convenience (if statusData is not null)
+  const balance = statusData?.balance;
+  const position = statusData?.position;
+  const ethPrice = statusData?.eth_price;
+  const sma5m = statusData?.sma_5m;
+  const rsi1m = statusData?.rsi_1m;
+  const lastAction = statusData?.last_action;
+  const pastTrades = statusData?.past_trades || [];
+  const logs = statusData?.logs || [];
 
-  if (!statusData) {
-    // still loading or no data
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
-        <p>Loading dashboard...</p>
-      </div>
-    );
+  // Render loading or error states
+  if (loading) {
+    return <div className="dashboard"><p className="loading">Loading data&hellip;</p></div>;
   }
-
-  // Determine if a position is active
-  const positionActive = statusData.position && statusData.position !== "NONE";
-  // Parse any closed trade logs
-  const closedTrades = parseClosedTrades(statusData.logs || []);
+  // We can show error message alongside data if partial data available
+  // but if there's no data at all yet, just show the error
+  if (error && !statusData) {
+    return <div className="dashboard"><p className="error">Error fetching data. Please try again later.</p></div>;
+  }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white p-8">
-      {/* Header */}
-      <header className="max-w-5xl mx-auto mb-8 text-center">
-        <h1 className="text-4xl font-bold mb-2 tracking-wide">
-          🧠 GMX Trading Bot Dashboard
-        </h1>
-        <p className="text-gray-300">High-Frequency Strategy Monitoring</p>
-      </header>
+    <div className="dashboard">
+      {/* Header Section */}
+      <h1 className="title"> Bot Trading Dashboard</h1>
+      <p className="subtitle">Real-time updates</p>
 
-      {/* Current Stats */}
-      <section className="max-w-5xl mx-auto">
-        <h2 className="text-2xl font-bold mb-4 uppercase tracking-wide">Current Stats</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-          <div className="bg-gray-800 p-4 rounded shadow hover:shadow-md transition">
-            <p className="text-sm text-gray-400">Balance</p>
-            <p className="text-xl font-semibold">${statusData.balance.toFixed(2)}</p>
-          </div>
-
-          <div className="bg-gray-800 p-4 rounded shadow hover:shadow-md transition">
-            <p className="text-sm text-gray-400">Position</p>
-            <p className="text-xl font-semibold">{statusData.position}</p>
-          </div>
-
-          <div className="bg-gray-800 p-4 rounded shadow hover:shadow-md transition">
-            <p className="text-sm text-gray-400">ETH Price</p>
-            <p className="text-xl font-semibold">${statusData.eth_price.toFixed(2)}</p>
-          </div>
-
-          <div className="bg-gray-800 p-4 rounded shadow hover:shadow-md transition">
-            <p className="text-sm text-gray-400">SMA (5m)</p>
-            <p className="text-xl font-semibold">${statusData.sma.toFixed(2)}</p>
-          </div>
-
-          <div className="bg-gray-800 p-4 rounded shadow hover:shadow-md transition">
-            <p className="text-sm text-gray-400">RSI (1m)</p>
-            <p className="text-xl font-semibold">{statusData.rsi.toFixed(2)}</p>
-          </div>
-
-          <div className="bg-gray-800 p-4 rounded shadow hover:shadow-md transition">
-            <p className="text-sm text-gray-400">Last Action</p>
-            <p className="text-xl font-semibold">{statusData.last_action}</p>
-          </div>
+      {/* Current Stats Cards */}
+      <h2 className="section-title">Current Stats</h2>
+      <div className="stats-cards">
+        <div className="card">
+          <span className="card-label">Balance</span>
+          <span className="card-value">
+            {balance !== undefined ? `$${balance.toFixed(2)}` : '-'}
+          </span>
         </div>
-
-        {/* Active/Inactive Position Label */}
-        <div className="mt-6 text-center">
-          {positionActive ? (
-            <div className="inline-block bg-green-600 text-white px-4 py-2 rounded shadow font-bold">
-              Position Active: {statusData.position.toUpperCase()}
-            </div>
-          ) : (
-            <div className="inline-block bg-red-600 text-white px-4 py-2 rounded shadow font-bold">
-              No Active Position
-            </div>
-          )}
+        <div className="card">
+          <span className="card-label">Position</span>
+          <span className="card-value">{position || 'None'}</span>
         </div>
-      </section>
-
-      {/* Past Trades */}
-      <section className="max-w-5xl mx-auto mt-12">
-        <h2 className="text-2xl font-bold mb-4 uppercase tracking-wide">Past Trades</h2>
-        <div className="bg-gray-800 p-4 rounded shadow-sm border border-gray-700 overflow-auto">
-          {closedTrades.length === 0 ? (
-            <p className="text-gray-400">No closed trades yet.</p>
-          ) : (
-            <table className="w-full text-left text-sm text-gray-300">
-              <thead>
-                <tr className="border-b border-gray-600 bg-gray-700">
-                  <th className="py-2 px-3 uppercase font-medium text-gray-200">Time</th>
-                  <th className="py-2 px-3 uppercase font-medium text-gray-200">Side</th>
-                  <th className="py-2 px-3 uppercase font-medium text-gray-200">Close Price</th>
-                  <th className="py-2 px-3 uppercase font-medium text-gray-200">Outcome</th>
-                  <th className="py-2 px-3 uppercase font-medium text-gray-200">PNL</th>
-                  <th className="py-2 px-3 uppercase font-medium text-gray-200">New Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {closedTrades.map((trade, i) => {
-                  if (!trade.timestamp) {
-                    // parse fail
-                    return (
-                      <tr key={i} className="border-b border-gray-700">
-                        <td colSpan={6} className="py-2 px-3 text-red-400">
-                          Could not parse: {trade.raw}
-                        </td>
-                      </tr>
-                    );
-                  }
-                  return (
-                    <tr
-                      key={i}
-                      className="border-b border-gray-700 hover:bg-gray-700/25 transition-colors"
-                    >
-                      <td className="py-2 px-3">{trade.timestamp}</td>
-                      <td className="py-2 px-3">{trade.side}</td>
-                      <td className="py-2 px-3">${trade.closePrice.toFixed(2)}</td>
-                      <td className="py-2 px-3">{trade.outcomeType}</td>
-                      <td
-                        className={
-                          trade.pnl >= 0 ? "py-2 px-3 text-green-400" : "py-2 px-3 text-red-400"
-                        }
-                      >
-                        {trade.pnl.toFixed(2)}
-                      </td>
-                      <td className="py-2 px-3">${trade.newBalance.toFixed(2)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+        <div className="card">
+          <span className="card-label">ETH Price</span>
+          <span className="card-value">
+            {ethPrice !== undefined ? `$${ethPrice.toFixed(2)}` : '-'}
+          </span>
         </div>
-      </section>
-
-      {/* Bot Logs */}
-      <section className="max-w-5xl mx-auto mt-12">
-        <h2 className="text-2xl font-bold mb-4 uppercase tracking-wide">Bot Logs</h2>
-        <div className="bg-gray-800 p-4 rounded shadow-sm border border-gray-700 max-h-64 overflow-y-auto">
-          {statusData.logs && statusData.logs.length > 0 ? (
-            <ul className="space-y-1 text-sm font-mono text-gray-300">
-              {statusData.logs.map((line, idx) => (
-                <li key={idx}>{line}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-gray-400">No logs yet.</p>
-          )}
+        <div className="card">
+          <span className="card-label">SMA (5m)</span>
+          <span className="card-value">
+            {sma5m !== undefined ? `$${sma5m.toFixed(2)}` : '-'}
+          </span>
         </div>
-      </section>
-
-      {/* Debug Info: raw JSON */}
-      <section className="max-w-5xl mx-auto mt-12">
-        <h2 className="text-2xl font-bold mb-4 uppercase tracking-wide">Debug Info</h2>
-        <div className="bg-gray-800 p-4 rounded shadow-sm border border-gray-700 overflow-auto text-sm text-gray-200 font-mono">
-          <pre>{JSON.stringify(statusData, null, 2)}</pre>
+        <div className="card">
+          <span className="card-label">RSI (1m)</span>
+          <span className="card-value">
+            {rsi1m !== undefined ? rsi1m.toFixed(2) : '-'}
+          </span>
         </div>
-      </section>
-    </main>
+        <div className="card">
+          <span className="card-label">Last Action</span>
+          <span className="card-value">{lastAction || 'None'}</span>
+        </div>
+      </div>
+
+      {/* If there's some additional note when no active trade, we can show it */}
+      {position === 'NONE' && (
+        <p className="no-active">No Active Trade</p>
+      )}
+
+      {/* Past Trades Section */}
+      <h2 className="section-title">Past Trades</h2>
+      {pastTrades.length > 0 ? (
+        <table className="trades-table">
+          <thead>
+            <tr>
+              <th>Side</th>
+              <th>Entry Price</th>
+              <th>Exit Price</th>
+              <th>PnL</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pastTrades.map((trade, idx) => (
+              <tr key={idx}>
+                <td>{trade.side}</td>
+                <td>${trade.entryPrice?.toFixed(2)}</td>
+                <td>${trade.exitPrice?.toFixed(2)}</td>
+                <td>{trade.pnl?.toFixed(2)}</td>
+                <td>{trade.timestamp}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="no-data">No closed trades yet.</p>
+      )}
+
+      {/* Bot Logs Section */}
+      <h2 className="section-title">Bot Logs</h2>
+      <div className="logs-container">
+        {logs.length > 0 ? (
+          <ul className="logs-list">
+            {logs.map((entry, idx) => (
+              <li key={idx}>{entry}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="no-data">No log entries available.</p>
+        )}
+      </div>
+
+      {/* Error message (if an error occurred after data loaded) */}
+      {error && statusData && (
+        <p className="error">⚠️ Live update failed. Displaying last known data.</p>
+      )}
+
+      {/* CSS Styles */}
+      <style>{`
+        .dashboard {
+          min-height: 100vh;
+          background: #121212;
+          color: #e0e0e0;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 2rem;
+        }
+        .title {
+          font-size: 2rem;
+          margin: 0 0 0.5rem;
+        }
+        .subtitle {
+          font-size: 1rem;
+          color: #bbbbbb;
+          margin: 0 0 2rem;
+        }
+        .section-title {
+          font-size: 1.25rem;
+          margin: 2rem 0 1rem;
+          color: #ffffff;
+        }
+        .stats-cards {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 1rem;
+        }
+        .card {
+          background: #1e1e1e;
+          padding: 1rem;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .card-label {
+          font-size: 0.9rem;
+          color: #cccccc;
+          margin-bottom: 0.25rem;
+          text-transform: uppercase;
+        }
+        .card-value {
+          font-size: 1.4rem;
+          font-weight: bold;
+          color: #ffffff;
+        }
+        .no-active {
+          font-style: italic;
+          color: #888888;
+          margin: 0.5rem 0 0;
+        }
+        .trades-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 1rem;
+        }
+        .trades-table th, .trades-table td {
+          text-align: left;
+          padding: 0.5rem 0.75rem;
+        }
+        .trades-table th {
+          background: #1e1e1e;
+          color: #cccccc;
+          font-weight: 500;
+        }
+        .trades-table tr:nth-child(even) {
+          background: #2a2a2a;
+        }
+        .trades-table tr:nth-child(odd) {
+          background: #242424;
+        }
+        .trades-table td {
+          border-bottom: 1px solid #333333;
+        }
+        .no-data {
+          color: #aaaaaa;
+          font-style: italic;
+        }
+        .logs-container {
+          background: #1e1e1e;
+          padding: 0.5rem;
+          border-radius: 4px;
+          max-height: 200px;
+          overflow-y: auto;
+          margin-bottom: 2rem;
+        }
+        .logs-list {
+          list-style: disc inside;
+          padding-left: 1rem;
+          margin: 0;
+        }
+        .logs-list li {
+          margin-bottom: 0.25rem;
+        }
+        .loading {
+          color: #cccccc;
+          font-size: 1.1rem;
+        }
+        .error {
+          color: #e57373; /* a soft red for errors */
+        }
+      `}</style>
+    </div>
   );
 }
+
+export default Dashboard;
