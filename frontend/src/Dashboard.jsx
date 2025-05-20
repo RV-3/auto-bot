@@ -36,8 +36,12 @@ function Dashboard() {
   const balance = statusData?.balance;
   const position = statusData?.position;
   const ethPrice = statusData?.eth_price;
-  const sma5m = statusData?.sma_5m;
-  const rsi1m = statusData?.rsi_1m;
+  // Backend exposes indicators as `sma` and `rsi`. The original
+  // component expected `sma_5m` and `rsi_1m`, which meant values were
+  // always undefined. Align the field names so the dashboard displays
+  // the current indicators correctly.
+  const sma = statusData?.sma;
+  const rsi = statusData?.rsi;
   const lastAction = statusData?.last_action;
   const pastTrades = statusData?.past_trades || [];
   const logs = statusData?.logs || [];
@@ -80,13 +84,13 @@ function Dashboard() {
         <div className="card">
           <span className="card-label">SMA (5m)</span>
           <span className="card-value">
-            {sma5m !== undefined ? `$${sma5m.toFixed(2)}` : '-'}
+            {sma !== undefined ? `$${sma.toFixed(2)}` : '-'}
           </span>
         </div>
         <div className="card">
           <span className="card-label">RSI (1m)</span>
           <span className="card-value">
-            {rsi1m !== undefined ? rsi1m.toFixed(2) : '-'}
+            {rsi !== undefined ? rsi.toFixed(2) : '-'}
           </span>
         </div>
         <div className="card">
