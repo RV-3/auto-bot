@@ -40,15 +40,146 @@ VAULT_ADDR_V1 = "0x489ee077994B6658eAfA855C308275EAd8097C4A"
 USDT_ADDR = "0xfd086bC7CD5C481DCC9C85eBe478A1C0b69FCbb9"  # USDT
 WETH_ADDR = "0x82af49447d8a07e3bd95bd0d56f35241523fbab1"  # WETH
 
-# --- GMX V2 Addresses (placeholders) ---
-EXCHANGE_ROUTER_ADDR_V2 = os.getenv("EXCHANGE_ROUTER_ADDR", "0x0000000000000000000000000000000000000000")
-DATA_STORE_ADDR_V2 = os.getenv("DATA_STORE_ADDR", "0x0000000000000000000000000000000000000000")
+# --- GMX V2 Addresses (Arbitrum mainnet) ---
+EXCHANGE_ROUTER_ADDR_V2 = os.getenv(
+    "EXCHANGE_ROUTER_ADDR",
+    "0x602b805EedddBbD9ddff44A7dcBD46cb07849685",
+)
+DATA_STORE_ADDR_V2 = os.getenv(
+    "DATA_STORE_ADDR",
+    "0xFD70de6b91282D8017aA4E741e9Ae325CAb992d8",
+)
+ROLE_STORE_ADDR_V2 = os.getenv(
+    "ROLE_STORE_ADDR",
+    "0x3c3d99FD298f679DBC2CEcd132b4eC4d0F5e6e72",
+)
+ORDER_VAULT_ADDR_V2 = os.getenv(
+    "ORDER_VAULT_ADDR",
+    "0x31eF83a530Fde1B38EE9A18093A333D8Bbbc40D5",
+)
+DEPOSIT_VAULT_ADDR_V2 = os.getenv(
+    "DEPOSIT_VAULT_ADDR",
+    "0xF89e77e8Dc11691C9e8757e84aaFbCD8A67d7A55",
+)
+WITHDRAWAL_VAULT_ADDR_V2 = os.getenv(
+    "WITHDRAWAL_VAULT_ADDR",
+    "0x0628D46b5D145f183AdB6Ef1f2c97eD1C4701C55",
+)
+EVENT_EMITTER_ADDR_V2 = os.getenv(
+    "EVENT_EMITTER_ADDR",
+    "0xC8ee91A54287DB53897056e12D9819156D3822Fb",
+)
+REFERRAL_STORAGE_ADDR_V2 = os.getenv(
+    "REFERRAL_STORAGE_ADDR",
+    "0xe6FaB3F0c7199b0d34d7FbE83394fc0e0D06e99d",
+)
+ORACLE_ADDR_V2 = os.getenv(
+    "ORACLE_ADDR",
+    "0x918b60bA71bAdfaDA72EF3A6C6F71d0C41D4785C",
+)
+CHAINLINK_DATA_STREAM_PROVIDER_ADDR_V2 = os.getenv(
+    "CHAINLINK_DATA_STREAM_PROVIDER_ADDR",
+    "0xF4122dF7Be4Ccd46D7397dAf2387B3A14e53d967",
+)
+SWAP_HANDLER_ADDR_V2 = os.getenv(
+    "SWAP_HANDLER_ADDR",
+    "0x266C6b192952c743De5541D642DC847d064c182C",
+)
+ORDER_HANDLER_ADDR_V2 = os.getenv(
+    "ORDER_HANDLER_ADDR",
+    "0xfc9Bc118fdDb89FF6fF720840446D73478dE4153",
+)
+DEPOSIT_HANDLER_ADDR_V2 = os.getenv(
+    "DEPOSIT_HANDLER_ADDR",
+    "0x089f51AAb35e854D2B65C9396622361a1854Bc3D",
+)
+WITHDRAWAL_HANDLER_ADDR_V2 = os.getenv(
+    "WITHDRAWAL_HANDLER_ADDR",
+    "0xedB5cD878871F074371e816AC67CbE010c31f00b",
+)
 
-# ABIs need to be provided for live trading
+# ABIs needed for live trading
+# Only a subset of each contract's ABI is included for brevity.
+# For production use, replace these with the full verified ABIs.
 POSITION_ROUTER_ABI = []
 ROUTER_ABI = []
-EXCHANGE_ROUTER_ABI = []
-ERC20_ABI = []
+EXCHANGE_ROUTER_ABI = [
+    {
+        "inputs": [
+            {"internalType": "contract Router", "name": "_router", "type": "address"},
+            {"internalType": "contract RoleStore", "name": "_roleStore", "type": "address"},
+            {"internalType": "contract DataStore", "name": "_dataStore", "type": "address"},
+            {"internalType": "contract EventEmitter", "name": "_eventEmitter", "type": "address"},
+            {"internalType": "contract IDepositHandler", "name": "_depositHandler", "type": "address"},
+            {"internalType": "contract IWithdrawalHandler", "name": "_withdrawalHandler", "type": "address"},
+            {"internalType": "contract IShiftHandler", "name": "_shiftHandler", "type": "address"},
+            {"internalType": "contract IOrderHandler", "name": "_orderHandler", "type": "address"},
+            {"internalType": "contract IExternalHandler", "name": "_externalHandler", "type": "address"},
+        ],
+        "stateMutability": "nonpayable",
+        "type": "constructor",
+    },
+    {
+        "inputs": [{"internalType": "bytes32", "name": "key", "type": "bytes32"}],
+        "name": "DisabledFeature",
+        "type": "error",
+    },
+    {
+        "inputs": [],
+        "name": "deposit",
+        "outputs": [{"internalType": "bytes32", "name": "", "type": "bytes32"}],
+        "stateMutability": "payable",
+        "type": "function",
+    },
+    # ... (truncated)
+]
+DATA_STORE_ABI = [
+    {
+        "inputs": [
+            {"internalType": "contract RoleStore", "name": "_roleStore", "type": "address"}
+        ],
+        "stateMutability": "nonpayable",
+        "type": "constructor",
+    },
+    {
+        "inputs": [
+            {"internalType": "address", "name": "msgSender", "type": "address"},
+            {"internalType": "string", "name": "role", "type": "string"},
+        ],
+        "name": "Unauthorized",
+        "type": "error",
+    },
+    {
+        "inputs": [
+            {"internalType": "bytes32", "name": "setKey", "type": "bytes32"},
+            {"internalType": "address", "name": "value", "type": "address"},
+        ],
+        "name": "addAddress",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function",
+    },
+    # ... (truncated)
+]
+ERC20_ABI = [
+    {
+        "constant": True,
+        "inputs": [{"name": "_owner", "type": "address"}],
+        "name": "balanceOf",
+        "outputs": [{"name": "balance", "type": "uint256"}],
+        "type": "function",
+    },
+    {
+        "constant": False,
+        "inputs": [
+            {"name": "_spender", "type": "address"},
+            {"name": "_value", "type": "uint256"},
+        ],
+        "name": "approve",
+        "outputs": [{"name": "", "type": "bool"}],
+        "type": "function",
+    },
+]
 
 # Set active addresses based on selected GMX version
 if GMX_VERSION == "v2":
