@@ -22,21 +22,45 @@ from collections import deque  # for a fixed-size log buffer
 # GMX / Web3 CONFIG
 # ------------------------------------------------------------------------------------
 LIVE_TRADING = False  # Set True to actually send trades to GMX
+# Which GMX version to use. "v1" (default) or "v2". When set to "v2" the bot
+# will attempt to use GMX V2 contracts. Addresses for V2 can be provided via
+# environment variables and should be replaced with real values when deploying
+# to mainnet.
+GMX_VERSION = os.getenv("GMX_VERSION", "v1").lower()
 ARBITRUM_RPC = "https://arb1.arbitrum.io/rpc"
 PRIVATE_KEY = os.getenv("PRIVATE_KEY") or "0xyourprivatekeyHERE"
 ACCOUNT_ADDRESS = None  # will be derived from private key
 
-POSITION_ROUTER_ADDR = "0xb87a436B93fFE9D75c5cFA7bAcFff96430b09868"
-ROUTER_ADDR = "0xaBBc5F99639c9B6bCb58544ddf04EFA6802F4064"
-READER_ADDR = "0x22199a49A999c351eF7927602CFB187ec3cae489"
-VAULT_ADDR =  "0x489ee077994B6658eAfA855C308275EAd8097C4A"
+# --- GMX V1 Addresses (default) ---
+POSITION_ROUTER_ADDR_V1 = "0xb87a436B93fFE9D75c5cFA7bAcFff96430b09868"
+ROUTER_ADDR_V1 = "0xaBBc5F99639c9B6bCb58544ddf04EFA6802F4064"
+READER_ADDR_V1 = "0x22199a49A999c351eF7927602CFB187ec3cae489"
+VAULT_ADDR_V1 = "0x489ee077994B6658eAfA855C308275EAd8097C4A"
 
-USDT_ADDR =  "0xfd086bC7CD5C481DCC9C85eBe478A1C0b69FCbb9"  # USDT
-WETH_ADDR =  "0x82af49447d8a07e3bd95bd0d56f35241523fbab1"  # WETH
+USDT_ADDR = "0xfd086bC7CD5C481DCC9C85eBe478A1C0b69FCbb9"  # USDT
+WETH_ADDR = "0x82af49447d8a07e3bd95bd0d56f35241523fbab1"  # WETH
 
-POSITION_ROUTER_ABI = []  # load real ABIs if going live
+# --- GMX V2 Addresses (placeholders) ---
+EXCHANGE_ROUTER_ADDR_V2 = os.getenv("EXCHANGE_ROUTER_ADDR", "0x0000000000000000000000000000000000000000")
+DATA_STORE_ADDR_V2 = os.getenv("DATA_STORE_ADDR", "0x0000000000000000000000000000000000000000")
+
+# ABIs need to be provided for live trading
+POSITION_ROUTER_ABI = []
 ROUTER_ABI = []
-USDT_ABI = []
+EXCHANGE_ROUTER_ABI = []
+ERC20_ABI = []
+
+# Set active addresses based on selected GMX version
+if GMX_VERSION == "v2":
+    POSITION_ROUTER_ADDR = None
+    ROUTER_ADDR = EXCHANGE_ROUTER_ADDR_V2
+    READER_ADDR = DATA_STORE_ADDR_V2
+    VAULT_ADDR = None
+else:
+    POSITION_ROUTER_ADDR = POSITION_ROUTER_ADDR_V1
+    ROUTER_ADDR = ROUTER_ADDR_V1
+    READER_ADDR = READER_ADDR_V1
+    VAULT_ADDR = VAULT_ADDR_V1
 
 # ------------------------------------------------------------------------------------
 # BOT CONFIG
@@ -272,6 +296,66 @@ class GMXConnector:
         tx_hash = self.web3.eth.send_raw_transaction(signed.rawTransaction)
         log_message(f"GMX IncreasePosition sent, tx={tx_hash.hex()} (Side={side}, Collat={amount_in}, Size={leverage_usd})")
 
+class GMXV2Connector:
+    """Minimal connector skeleton for GMX V2."""
+    def __init__(self, web3, account, do_live=False):
+        self.web3 = web3
+        self.account = account
+        self.do_live = do_live
+
+        if self.web3 and self.do_live:
+            self.exchange_router = self.web3.eth.contract(
+                address=Web3.to_checksum_address(ROUTER_ADDR),
+                abi=EXCHANGE_ROUTER_ABI
+            )
+            self.collateral_token = self.web3.eth.contract(
+                address=Web3.to_checksum_address(USDT_ADDR),
+                abi=ERC20_ABI
+            )
+        else:
+            self.exchange_router = None
+            self.collateral_token = None
+
+    def approve_collateral(self, amount):
+        if not self.do_live:
+            log_message(f"Simulate: approve collateral ({amount})")
+            return
+        try:
+            nonce = self.web3.eth.get_transaction_count(self.account.address)
+            tx = self.collateral_token.functions.approve(ROUTER_ADDR, amount).buildTransaction({
+                'from': self.account.address,
+                'nonce': nonce,
+                'gas': 100000,
+                'chainId': 42161
+            })
+            signed = self.account.sign_transaction(tx)
+            tx_hash = self.web3.eth.send_raw_transaction(signed.rawTransaction)
+            self.web3.eth.wait_for_transaction_receipt(tx_hash)
+            log_message(f"Collateral approved for GMX V2 router! tx={tx_hash.hex()}")
+        except Exception as e:
+            log_message(f"[!] Collateral approval error: {e}")
+
+    def open_gmx_position(self, side, collateral_usd, leverage_usd):
+        """Placeholder implementation for sending a GMX V2 order."""
+        if not self.do_live:
+            log_message(f"Simulate GMXv2 open {side}: Collat={collateral_usd} USD, Size={leverage_usd} USD")
+            return
+        try:
+            nonce = self.web3.eth.get_transaction_count(self.account.address)
+            tx = {
+                'to': ROUTER_ADDR,
+                'from': self.account.address,
+                'value': 0,
+                'nonce': nonce,
+                'gas': 500000,
+                'chainId': 42161
+            }
+            signed = self.account.sign_transaction(tx)
+            tx_hash = self.web3.eth.send_raw_transaction(signed.rawTransaction)
+            log_message(f"GMXv2 position tx sent: {tx_hash.hex()} (side={side})")
+        except Exception as e:
+            log_message(f"[!] GMXv2 trade error: {e}")
+
 # ------------------------------------------------------------------------------------
 # PAPER TRADING BOT
 # ------------------------------------------------------------------------------------
@@ -397,7 +481,10 @@ def strategy_decision(df_med, df_short, bot: PaperTradingBot):
 def main_loop():
     bot = PaperTradingBot(STARTING_BALANCE, RISK_PER_TRADE_PCT)
     try:
-        gmx = GMXConnector(web3, acct, do_live=LIVE_TRADING)
+        if GMX_VERSION == "v2":
+            gmx = GMXV2Connector(web3, acct, do_live=LIVE_TRADING)
+        else:
+            gmx = GMXConnector(web3, acct, do_live=LIVE_TRADING)
     except NameError:
         gmx = None
 
@@ -414,8 +501,11 @@ def main_loop():
 
     # If real trades, do one-time approvals (collateral, plugin)
     if LIVE_TRADING and gmx and gmx.do_live:
-        gmx.approve_plugin()
-        gmx.approve_usdt(1000 * 10**6)  # e.g. 1000 USDT allowance
+        if GMX_VERSION == "v2":
+            gmx.approve_collateral(1000 * 10**6)
+        else:
+            gmx.approve_plugin()
+            gmx.approve_usdt(1000 * 10**6)  # e.g. 1000 USDT allowance
 
     while True:
         log_message("=== NEW CYCLE: Fetching Candle Data ===")
@@ -444,7 +534,7 @@ def main_loop():
             # Real GMX
             if LIVE_TRADING and gmx and gmx.do_live:
                 collateral = 200 * 10**6  # e.g. 200 USDT
-                size_usd  = 1000          # => 5x if we deposit 200 USDT
+                size_usd = 1000  # => 5x if we deposit 200 USDT
                 gmx.open_gmx_position("long", collateral, size_usd)
 
         elif signal == "SELL":
@@ -455,7 +545,7 @@ def main_loop():
 
             if LIVE_TRADING and gmx and gmx.do_live:
                 collateral = 200 * 10**6
-                size_usd  = 1000
+                size_usd = 1000
                 gmx.open_gmx_position("short", collateral, size_usd)
 
         # Update status for the UI
